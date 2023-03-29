@@ -1,0 +1,353 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.0//EN">
+<style>
+    html {
+            margin: 0px;
+            padding: 0px;
+        }
+</style>
+<html>
+    
+    <head>
+      <title>MQTT Temperature</title>
+    </head>
+
+    <body  bgcolor="#181818">
+             
+        <div>
+            <h1 style="font-size: 4em;">Plant's Monitoring</h1>
+        </div>
+
+        
+          <table>
+            <td>
+                VENTILATION
+            </td>
+            <td>
+                <label class="switch">
+                    <input type="checkbox" id="buttoncheck">
+                    <span class="slider round"></span>
+                  </label>
+            </td>
+           
+          </table>
+        <style>
+        
+        div {
+            background-color: rgb(66, 82, 122);
+        }
+        h1 {
+            display: block;
+            font-size: 3em;
+            font-family: Arial, Helvetica, sans-serif;
+            margin-top: 0px;
+            margin-bottom: 0px;
+            margin-left: 0px;
+            margin-right: 0px;
+            font-weight: bold;
+            color: beige;
+            background-color: rgb(66, 82, 122);
+            }
+        body {
+            color: beige;
+        }
+        /* The switch - the box around the slider */
+            .switch {
+            position: relative;
+            display: inline-block;
+            width: 60px;
+            height: 34px;
+            left: 10%;
+            bottom: 100%;
+            }
+
+            /* Hide default HTML checkbox */
+            .switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+            }
+
+            /* The slider */
+            .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #ccc;
+            -webkit-transition: .4s;
+            transition: .4s;
+            }
+
+            .slider:before {
+            position: absolute;
+            content: "";
+            height: 26px;
+            width: 26px;
+            left: 4px;
+            bottom: 4px;
+            background-color: white;
+            -webkit-transition: .4s;
+            transition: .4s;
+            }
+
+            input:checked + .slider {
+            background-color: #2196F3;
+            }
+
+            input:focus + .slider {
+            box-shadow: 0 0 1px #2196F3;
+            }
+
+            input:checked + .slider:before {
+            -webkit-transform: translateX(26px);
+            -ms-transform: translateX(26px);
+            transform: translateX(26px);
+            }
+
+            /* Rounded sliders */
+            .slider.round {
+            border-radius: 34px;
+            }
+
+            .slider.round:before {
+            border-radius: 50%;
+            }
+        </style>
+    </body>
+    <script src="https://d3js.org/d3.v4.js">
+        import {Legend} from "@d3/color-legend"
+
+    </script>
+    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js"></script>
+
+    <script>
+
+        /**
+         * table ventilation
+         */
+        d3.selectAll('table')
+            .style("border", '7px solid #90ee90')
+            .style('border-radius', '10px')
+//                    .style("border-bottom", border_bottom_table)
+            .style("padding", "30px")
+            .style('float', 'left')
+            .attr("width", width)
+            .attr("height", height)
+            .style('margin-left', '3em')
+            .style('margin-right', '5em')
+            .style('margin-bottom', '3em')
+            .style('margin-top', '20px')
+            .style('font-family', 'Arial')
+            .style("font-size", "28px")
+        /***
+         * html elements
+         * 
+        */
+        let table = null;
+        let table_status = null;
+        var values = [['Temperature ',  ' waiting..'],[ 'Humidity ',' waiting..'], ['Illumination',' waiting..']];
+        var labels = ['Status of the Plant']
+        var status_val = [['DISCONNECTED']];
+        var table_images = ['https://www.iconpacks.net/icons/2/free-plant-icon-1573-thumb.png', 'https://upload.wikimedia.org/wikipedia/en/thumb/d/d5/Thermometer_icon.png/800px-Thermometer_icon.png', 'https://icons.iconarchive.com/icons/custom-icon-design/lovely-weather-2/512/Humidity-icon.png', 'https://cdn-icons-png.flaticon.com/512/831/831682.png']
+        var connection_images = ['https://cdn-icons-png.flaticon.com/512/718/718378.png', 'https://cdn3.iconfinder.com/data/icons/basic-colored/1024/shutdown-512.png']
+        var online_image = 'https://icon-library.com/images/online-icon-png/online-icon-png-13.jpg';
+        var offline_image = 'https://cdn3.iconfinder.com/data/icons/basic-colored/1024/shutdown-512.png';
+
+        var width = '50%';
+        var height = '50vh'; 
+        let temp = 0;
+        let hum = 0;
+        let irradiance = 0;
+        let val = null;
+        /*
+        * MQTT-WebClient example for Web-IO 4.0
+        */
+        var hostname = "mqtt3.thingspeak.com";
+        var port = 80;
+        var clientId = "<clientId>";
+        var username = "<username>";
+        var password = "<password>";
+        var subscription = "channels/<channelID>/subscribe/fields/field1";
+        var subscription2 = "channels/<channelID>/subscribe/fields/field2";
+        var subscription3 = 'channels/<channelID>/subscribe/fields/field3'
+        mqttClient = new Paho.MQTT.Client(hostname, port, clientId);
+        mqttClient.onMessageArrived = MessageArrived;
+        mqttClient.onConnectionLost = ConnectionLost;
+        Connect();
+
+        /*Initiates a connection to the MQTT broker*/
+        function Connect(){
+            mqttClient.connect({
+            onSuccess: Connected,
+            onFailure: ConnectionFailed,
+            keepAliveInterval: 10,
+            userName: username,
+            useSSL: false,
+            password: password});
+        }
+
+        /*Callback for successful MQTT connection */
+        function Connected() {
+            console.log("Connected");
+            connection_images.pop()
+            connection_images.push(online_image);
+            status_val = [['CONNECTED']]
+            reset_tables();
+            mqttClient.subscribe(subscription);
+            mqttClient.subscribe(subscription2);
+            mqttClient.subscribe(subscription3);
+        }
+
+        /*Callback for failed connection*/
+        function ConnectionFailed(res) {
+            connection_images.pop()
+            connection_images.push(offline_image)
+            status_val = [['DISCONNECTED']]
+            reset_tables();
+            console.log("Connect failed:" + res.errorMessage);
+        }
+
+        /*Callback for lost connection*/
+        function ConnectionLost(res) {
+            if (res.errorCode !== 0) {
+                console.log("Connection lost:" + res.errorMessage);
+                Connect();
+            }
+        }
+
+        /*Callback for incoming message processing */
+        function MessageArrived(message) {
+            console.log(message.destinationName +" : " + message.payloadString);
+            const data = new Date();
+            switch(message.destinationName){
+                case subscription:
+                    temp = message.payloadString;
+                    break;
+                case subscription2:
+                    hum = message.payloadString;
+                    break;
+                case subscription3: 
+                    irradiance = message.payloadString;
+                    
+                default:
+                    break;
+            }
+            if (table != null)
+                table.remove();
+                
+            values = [['Temperature ', temp + ' °C'],[ 'Humidity ',hum + ' %'], ['Illumination',irradiance + ' lm']];
+            reset_tables();
+        }
+
+        function changeTemp()
+        {
+            var inputTempVariable = 55;
+            document.getElementById('current-temp').innerHTML = inputTempVariable;
+        }
+
+        
+        function create_table (width, height, labels, values) {
+            var tab = d3.select('body')
+                   // .selectAll('div')
+                   // .selectAll('svg')
+                    .append('g')
+                    .append('table')
+                    .style("border", '7px solid #90ee90')
+                    .style('border-radius', '10px')
+//                    .style("border-bottom", border_bottom_table)
+                    .style("padding", "5px")
+                    .style('float', 'left')
+                    .attr("width", width)
+                    .attr("height", height)
+                    .style('margin-left', '5em')
+                    .style('margin-right', '5em')
+                    .style('margin-bottom', '3em')
+                    .style('margin-top', '20px')
+                    .style('font-family', 'Arial')
+            let thead = tab.append("thead");
+            let tbody = tab.append("tbody");
+            thead.append("tr")
+                .selectAll("th")
+            
+                //.style('border-radius', '5px')
+                .data(labels)
+                .enter()
+                .append("th")
+                .text(function (d) { return d; })
+                .style("font-size", "32px")
+    //            .style("border-bottom", '3px solid black');
+                
+
+            tab.append("tbody")
+                    .selectAll("tr").data(values)
+                    .enter().append("tr")
+                    .selectAll("td")
+                    .data(function(d){return d;})
+                    .enter().append("td")
+                    //.style("border", "1px black solid")
+                    .style("padding", "25px")
+                    .on("mouseover", function(){
+                    d3.select(this).style("background-color", "#65c368");
+                })
+                    .on("mouseout", function(){
+                    d3.select(this).style("background-color", "#181818");
+                })
+                    .text(function(d){return d;})
+                    .style("font-size", "24px");
+                return tab;
+            }
+        function add_images (table1, images) {
+            table1.selectAll('tr')
+            .data(images)
+            .append('img')
+            .attr('width', '50px')
+            .attr('height', '50px')
+            .attr('src', function(d) {
+                return d;
+            })
+        }
+        function reset_tables() {
+            table.remove();
+            table_status.remove();
+            table_status = create_table('25%', '50hv', ['STATUS'], status_val);
+            table  = create_table(width, height, labels, values);
+            add_images(table, table_images);
+            add_images(table_status, connection_images);
+        }
+
+        table_status = create_table('25%', '50vh', ['STATUS'], status_val);
+        table  = create_table(width, height, labels, values);
+    
+        add_images(table, table_images);
+        add_images(table_status, connection_images);
+        const checkbox = document.getElementById('buttoncheck')
+    
+        async function disable_button(){
+            
+            checkbox.disabled = true;
+            alert('aspetta 15 secondi prima di premere di nuovo');
+            await new Promise(r => setTimeout(r, 15000));
+            checkbox.disabled = false;
+        }
+
+        function event_of_checkbox(){
+        if (event.currentTarget.checked) {
+            message = new Paho.MQTT.Message("1");
+            message.destinationName = "channels/<channelID>/subscribe/fields/field4";
+            mqttClient.send(message);
+            disable_button();
+        } else {
+            message = new Paho.MQTT.Message("0");
+            message.destinationName = "channels/<channelID>/subscribe/fields/field4";
+            mqttClient.send(message);
+            disable_button();
+        }
+        }
+
+        checkbox.addEventListener('change',  event_of_checkbox);
+
+ 
+        </script>
+</html>
